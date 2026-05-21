@@ -91,6 +91,11 @@ export default function App() {
     ? consolidateByYear(filteredRawData, selectedYear, metas)
     : [];
 
+  const monthlyRawData = filteredRawData.filter(
+    r => r.mes === selectedMonth && r.ano === selectedYear
+  );
+  const yearlyRawData = filteredRawData.filter(r => r.ano === selectedYear);
+
   return (
     <>
       <Toaster />
@@ -157,6 +162,7 @@ export default function App() {
                     <ConsolidationTable
                       data={monthlyData}
                       period={`${selectedMonth}/${selectedYear}`}
+                      rawData={monthlyRawData}
                     />
                   </>
                 ) : (
@@ -174,6 +180,7 @@ export default function App() {
                     <ConsolidationTable
                       data={yearlyData}
                       period={`Ano ${selectedYear}`}
+                      rawData={yearlyRawData}
                     />
                   </>
                 ) : (
