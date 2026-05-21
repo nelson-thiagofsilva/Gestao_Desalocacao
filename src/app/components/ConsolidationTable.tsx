@@ -64,9 +64,14 @@ export function ConsolidationTable({ data, period, rawData }: ConsolidationTable
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
-  const formatPercent = (value: number) => `${value.toFixed(2)}%`;
+  const formatPercent = (value: number) =>
+    `${new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)}%`;
 
-  const formatHours = (value: number) => `${value.toFixed(0)}h`;
+  const formatHours = (value: number) =>
+    `${new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value)}h`;
+
+  const formatNumber = (value: number, decimals = 2) =>
+    new Intl.NumberFormat('pt-BR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(value);
 
   const openDrillDown = (area: string, column: string) => {
     const tipoFilter = TIPO_FILTERS[column];
@@ -218,7 +223,7 @@ export function ConsolidationTable({ data, period, rawData }: ConsolidationTable
                     </TableCell>
                     <TableCell>{formatCurrency(row.custoMedioFTE)}</TableCell>
                     <TableCell>{formatCurrency(row.ociososidadeRS)}</TableCell>
-                    <TableCell>{row.ociososidadeFTE.toFixed(2)}</TableCell>
+                    <TableCell>{formatNumber(row.ociososidadeFTE)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -284,7 +289,7 @@ export function ConsolidationTable({ data, period, rawData }: ConsolidationTable
                             </span>
                           </TableCell>
                           <TableCell className="text-right">
-                            {r.horas_apontadas.toFixed(1)}h
+                            {formatNumber(r.horas_apontadas, 1)}h
                           </TableCell>
                           <TableCell className="text-right">
                             {formatCurrency(r.valor_hora)}
