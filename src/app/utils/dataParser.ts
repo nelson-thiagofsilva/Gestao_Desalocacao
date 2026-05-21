@@ -39,32 +39,12 @@ export interface AreaData {
 function parseNumber(value: string): number {
   if (!value || value === '') return 0;
 
-  // Remove espaços em branco
-  let cleanValue = value.trim();
-
-  // Remove pontos usados como separadores de milhar (ex: 1.000 -> 1000)
-  // e mantém vírgula como decimal
-  // Detecta se é formato BR (1.000,50) ou US (1,000.50)
-  const hasComma = cleanValue.includes(',');
-  const hasDot = cleanValue.includes('.');
-
-  if (hasComma && hasDot) {
-    // Formato pode ser BR (1.000.000,50) ou US (1,000,000.50)
-    const lastComma = cleanValue.lastIndexOf(',');
-    const lastDot = cleanValue.lastIndexOf('.');
-
-    if (lastComma > lastDot) {
-      // Formato BR: remove pontos e substitui vírgula por ponto
-      cleanValue = cleanValue.replace(/\./g, '').replace(',', '.');
-    } else {
-      // Formato US: remove vírgulas
-      cleanValue = cleanValue.replace(/,/g, '');
-    }
-  } else if (hasComma) {
-    // Só vírgula: substitui por ponto
-    cleanValue = cleanValue.replace(',', '.');
-  }
-  // Se só tem ponto, já está no formato correto
+  // Formato fixo BR: ponto como separador de milhar, vírgula como decimal
+  // Ex: 1.234.567,89 → 1234567.89
+  const cleanValue = value
+    .trim()
+    .replace(/\./g, '')   // remove separadores de milhar (pontos)
+    .replace(',', '.');   // substitui vírgula decimal por ponto
 
   const parsed = parseFloat(cleanValue);
 
