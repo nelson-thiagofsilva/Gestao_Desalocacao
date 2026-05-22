@@ -137,7 +137,7 @@ function aggregateByTipo(rows: RawDataRow[], tipo: string): { custo: number; hor
   const filtered = rows.filter(row => row.tipo.toLowerCase().includes(tipo.toLowerCase()));
   return {
     custo: filtered.reduce((sum, row) => sum + row.custo_projeto, 0),
-    horas: filtered.reduce((sum, row) => sum + row.horas_apontadas, 0),
+    horas: filtered.reduce((sum, row) => sum + row.qtdehoras, 0),
   };
 }
 
@@ -201,22 +201,20 @@ export function consolidateByArea(
     const overhead = aggregateByTipo(rows, 'overhead');
     const ferias = aggregateByTipo(rows, 'férias');
 
-    const horasTotais = debitoBH.horas + desalocacao.horas + faturado.horas + overhead.horas + ferias.horas;
-
-    const percentualDesalocacaoSemFerias = horasTotais > 0
-      ? (desalocacao.horas / horasTotais) * 100
+    const percentualDesalocacaoSemFerias = custoTotal > 0
+      ? (desalocacao.custo / custoTotal) * 100
       : 0;
 
-    const percentualDesalocacaoComFerias = horasTotais > 0
-      ? ((desalocacao.horas + ferias.horas) / horasTotais) * 100
+    const percentualDesalocacaoComFerias = custoTotal > 0
+      ? ((desalocacao.custo + ferias.custo) / custoTotal) * 100
       : 0;
 
     const meta = metas[area] || 0;
     const variacaoMeta = percentualDesalocacaoComFerias - meta;
 
     const custoMedioFTE = colaboradoresUnicos > 0 ? custoTotal / colaboradoresUnicos : 0;
-    const ociososidadeRS = desalocacao.custo;
-    const ociososidadeFTE = custoMedioFTE > 0 ? desalocacao.custo / custoMedioFTE : 0;
+    const ociososidadeRS = custoMedioFTE > 0 ? desalocacao.custo / custoMedioFTE : 0;
+    const ociososidadeFTE = desalocacao.horas / 168;
 
     result.push({
       area,
@@ -315,22 +313,20 @@ export function consolidateByYear(
     const overhead = aggregateByTipo(rows, 'overhead');
     const ferias = aggregateByTipo(rows, 'férias');
 
-    const horasTotais = debitoBH.horas + desalocacao.horas + faturado.horas + overhead.horas + ferias.horas;
-
-    const percentualDesalocacaoSemFerias = horasTotais > 0
-      ? (desalocacao.horas / horasTotais) * 100
+    const percentualDesalocacaoSemFerias = custoTotal > 0
+      ? (desalocacao.custo / custoTotal) * 100
       : 0;
 
-    const percentualDesalocacaoComFerias = horasTotais > 0
-      ? ((desalocacao.horas + ferias.horas) / horasTotais) * 100
+    const percentualDesalocacaoComFerias = custoTotal > 0
+      ? ((desalocacao.custo + ferias.custo) / custoTotal) * 100
       : 0;
 
     const meta = metas[area] || 0;
     const variacaoMeta = percentualDesalocacaoComFerias - meta;
 
     const custoMedioFTE = colaboradoresUnicos > 0 ? custoTotal / colaboradoresUnicos : 0;
-    const ociososidadeRS = desalocacao.custo;
-    const ociososidadeFTE = custoMedioFTE > 0 ? desalocacao.custo / custoMedioFTE : 0;
+    const ociososidadeRS = custoMedioFTE > 0 ? desalocacao.custo / custoMedioFTE : 0;
+    const ociososidadeFTE = desalocacao.horas / 168;
 
     result.push({
       area,
@@ -389,4 +385,49 @@ export function getAvailableYears(data: RawDataRow[]): string[] {
 export function getAreas(data: RawDataRow[]): string[] {
   const areas = new Set(data.map(row => row.time || 'Sem Time'));
   return Array.from(areas).sort();
+}
+
+export interface DesalocacaoMensalRow {
+  area: string;
+  meses: Record<string, number>; // '01'..'12' → percentualDesalocacaoComFerias
+}
+
+export function consolidateDesalocacaoMensal(
+  rawData: RawDataRow[],
+  ano: string,
+  filteredAreas: string[]
+): DesalocacaoMensalRow[] {
+  const filtered = rawData.filter(r => r.ano === ano);
+
+  // Coleta apenas meses que têm dados no ano
+  const mesesComDados = Array.from(new Set(filtered.map(r => r.mes))).sort();
+
+  // Coleta áreas presentes (respeitando filtro)
+  const areas = Array.from(
+    new Set(filtered.map(r => r.time || 'Sem Time'))
+  )
+    .filter(a => filteredAreas.includes(a))
+    .sort();
+
+  return areas.map(area => {
+    const meses: Record<string, number> = {};
+
+    mesesComDados.forEach(mes => {
+      const rows = filtered.filter(
+        r => (r.time || 'Sem Time') === area && r.mes === mes
+      );
+
+      const custoTotal = rows.reduce((s, r) => s + r.custo_projeto, 0);
+      const desalocacao = rows
+        .filter(r => r.tipo.toLowerCase().includes('desalocação') || r.tipo.toLowerCase().includes('desalocacao'))
+        .reduce((s, r) => s + r.custo_projeto, 0);
+      const ferias = rows
+        .filter(r => r.tipo.toLowerCase().includes('férias') || r.tipo.toLowerCase().includes('ferias'))
+        .reduce((s, r) => s + r.custo_projeto, 0);
+
+      meses[mes] = custoTotal > 0 ? ((desalocacao + ferias) / custoTotal) * 100 : 0;
+    });
+
+    return { area, meses };
+  });
 }

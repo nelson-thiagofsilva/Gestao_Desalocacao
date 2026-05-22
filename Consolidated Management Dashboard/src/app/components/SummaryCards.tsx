@@ -6,7 +6,7 @@ interface SummaryCardsProps {
     custoTotal: number;
     totalColaboradores: number;
     desalocacao: { custo: number };
-    percentualDesalocacaoComFerias: number;
+    ferias: { custo: number };
   }>;
 }
 
@@ -14,16 +14,19 @@ export function SummaryCards({ data }: SummaryCardsProps) {
   const totalCusto = data.reduce((sum, item) => sum + item.custoTotal, 0);
   const totalColaboradores = data.reduce((sum, item) => sum + item.totalColaboradores, 0);
   const totalDesalocacao = data.reduce((sum, item) => sum + item.desalocacao.custo, 0);
-  const mediaDesalocacao = data.length > 0
-    ? data.reduce((sum, item) => sum + item.percentualDesalocacaoComFerias, 0) / data.length
+  const totalFerias = data.reduce((sum, item) => sum + item.ferias.custo, 0);
+  const mediaDesalocacao = totalCusto > 0
+    ? ((totalDesalocacao + totalFerias) / totalCusto) * 100
     : 0;
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(value);
-  };
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+
+  const formatPercent = (value: number) =>
+    `${new Intl.NumberFormat('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value)}%`;
 
   const cards = [
     {
@@ -46,7 +49,7 @@ export function SummaryCards({ data }: SummaryCardsProps) {
     },
     {
       title: 'Média % Desalocação',
-      value: `${mediaDesalocacao.toFixed(2)}%`,
+      value: formatPercent(mediaDesalocacao),
       icon: AlertCircle,
       color: mediaDesalocacao > 15 ? 'text-red-600' : 'text-green-600',
     },

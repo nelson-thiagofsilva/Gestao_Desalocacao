@@ -47,6 +47,7 @@ interface ConsolidationTableProps {
   data: AreaData[];
   period: string;
   rawData: RawDataRow[];
+  hideOciosidade?: boolean;
 }
 
 const TIPO_FILTERS: Record<string, (tipo: string) => boolean> = {
@@ -58,7 +59,7 @@ const TIPO_FILTERS: Record<string, (tipo: string) => boolean> = {
   'Férias': (t) => t.toLowerCase().includes('férias') || t.toLowerCase().includes('ferias'),
 };
 
-export function ConsolidationTable({ data, period, rawData }: ConsolidationTableProps) {
+export function ConsolidationTable({ data, period, rawData, hideOciosidade = false }: ConsolidationTableProps) {
   const [drillDown, setDrillDown] = useState<DrillDown | null>(null);
 
   const formatCurrency = (value: number) =>
@@ -126,9 +127,9 @@ export function ConsolidationTable({ data, period, rawData }: ConsolidationTable
                   <TableHead className="min-w-[120px]">% Desaloc. (+Férias)</TableHead>
                   <TableHead className="min-w-[80px]">Meta</TableHead>
                   <TableHead className="min-w-[120px]">Variação Meta</TableHead>
-                  <TableHead className="min-w-[120px]">Custo Médio FTE</TableHead>
-                  <TableHead className="min-w-[120px]">Ociosidade R$</TableHead>
-                  <TableHead className="min-w-[120px]">Ociosidade FTE</TableHead>
+                  {!hideOciosidade && <TableHead className="min-w-[120px]">Custo Médio FTE</TableHead>}
+                  {!hideOciosidade && <TableHead className="min-w-[120px]">Ociosidade R$</TableHead>}
+                  {!hideOciosidade && <TableHead className="min-w-[120px]">Ociosidade FTE</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -221,9 +222,9 @@ export function ConsolidationTable({ data, period, rawData }: ConsolidationTable
                     <TableCell className={row.variacaoMeta > 0 ? 'text-red-600' : 'text-green-600'}>
                       {formatPercent(row.variacaoMeta)}
                     </TableCell>
-                    <TableCell>{formatCurrency(row.custoMedioFTE)}</TableCell>
-                    <TableCell>{formatCurrency(row.ociososidadeRS)}</TableCell>
-                    <TableCell>{formatNumber(row.ociososidadeFTE)}</TableCell>
+                    {!hideOciosidade && <TableCell>{formatCurrency(row.custoMedioFTE)}</TableCell>}
+                    {!hideOciosidade && <TableCell>{formatNumber(row.ociososidadeRS)}</TableCell>}
+                    {!hideOciosidade && <TableCell>{formatNumber(row.ociososidadeFTE)}</TableCell>}
                   </TableRow>
                 ))}
               </TableBody>
@@ -289,7 +290,7 @@ export function ConsolidationTable({ data, period, rawData }: ConsolidationTable
                             </span>
                           </TableCell>
                           <TableCell className="text-right">
-                            {formatNumber(r.horas_apontadas, 1)}h
+                            {formatNumber(r.qtdehoras, 1)}h
                           </TableCell>
                           <TableCell className="text-right">
                             {formatCurrency(r.valor_hora)}

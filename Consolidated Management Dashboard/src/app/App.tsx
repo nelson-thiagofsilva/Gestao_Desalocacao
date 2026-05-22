@@ -8,6 +8,7 @@ import { SettingsMenu } from './components/SettingsMenu';
 import { SummaryCards } from './components/SummaryCards';
 import { EmptyState } from './components/EmptyState';
 import { NoDataMessage } from './components/NoDataMessage';
+import { DesalocacaoMensalTable } from './components/DesalocacaoMensalTable';
 import { DesalocacaoChart } from './components/DesalocacaoChart';
 import { CustoChart } from './components/CustoChart';
 import { DebugInfo } from './components/DebugInfo';
@@ -16,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import {
   parseTxtData,
   consolidateByArea,
+  consolidateDesalocacaoMensal,
   consolidateByYear,
   getAvailableMonths,
   getAvailableYears,
@@ -89,6 +91,10 @@ export default function App() {
 
   const yearlyData = filteredRawData.length > 0 && selectedYear
     ? consolidateByYear(filteredRawData, selectedYear, metas)
+    : [];
+
+  const desalocacaoMensalData = selectedYear
+    ? consolidateDesalocacaoMensal(filteredRawData, selectedYear, selectedAreas)
     : [];
 
   const monthlyRawData = filteredRawData.filter(
@@ -181,6 +187,11 @@ export default function App() {
                       data={yearlyData}
                       period={`Ano ${selectedYear}`}
                       rawData={yearlyRawData}
+                      hideOciosidade
+                    />
+                    <DesalocacaoMensalTable
+                      data={desalocacaoMensalData}
+                      ano={selectedYear}
                     />
                   </>
                 ) : (
