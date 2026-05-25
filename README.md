@@ -9,3 +9,4 @@
 
   Run `npm run dev` to start the development server.
   
+  Ajuda do Marcelo para configurar o GIT
