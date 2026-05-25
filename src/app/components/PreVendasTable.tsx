@@ -272,8 +272,11 @@ export function PreVendasTable({ rawData }: PreVendasTableProps) {
                     <td className="px-4 py-3 text-center tabular-nums">
                       {fmtPct(rows.length > 0 ? (totalVendidas / rows.length) * 100 : 0)}
                     </td>
-                    <td className="px-4 py-3 text-center text-muted-foreground">
-                      {totalVendidas}/{rows.length}
+                    <td className="px-4 py-3 text-center">
+                      <span className="tabular-nums">{totalVendidas}/{rows.length}</span>
+                      <span className="ml-2 text-xs text-muted-foreground tabular-nums">
+                        ({fmtPct(rows.length > 0 ? (totalVendidas / rows.length) * 100 : 0)})
+                      </span>
                     </td>
                   </tr>
                 </tfoot>
