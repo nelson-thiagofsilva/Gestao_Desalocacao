@@ -1,450 +1,460 @@
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import { type AreaData, type RawDataRow } from './dataParser';
+import autoTable, { type RowInput, type CellDef } from 'jspdf-autotable';
+import { type AreaData, type RawDataRow, type DesalocacaoMensalRow } from './dataParser';
 
-// ─── Paleta ───────────────────────────────────────────────────────────────────
+// ─── Cores — espelham o tema do projeto ──────────────────────────────────────
 const C = {
-  primary:    [26,  43,  74]  as [number,number,number],
-  secondary:  [46,  93, 159]  as [number,number,number],
-  accent:     [59, 130, 246]  as [number,number,number],
-  headerBg:   [30,  58,  95]  as [number,number,number],
-  rowAlt:     [248,250,252]   as [number,number,number],
-  totalBg:    [226,232,240]   as [number,number,number],
-  border:     [203,213,225]   as [number,number,number],
-  white:      [255,255,255]   as [number,number,number],
-  text:       [30,  41,  59]  as [number,number,number],
-  muted:      [100,116,139]   as [number,number,number],
-  lightBlue:  [239,246,255]   as [number,number,number],
-  success:    [22, 101, 52]   as [number,number,number],
+  headerBg:    [30,  58,  95]  as [number,number,number], // primary dark blue
+  headerText:  [255, 255, 255] as [number,number,number],
+  accent:      [59,  130, 246] as [number,number,number], // blue-500
+  rowAlt:      [248, 250, 252] as [number,number,number], // slate-50
+  totalBg:     [226, 232, 240] as [number,number,number], // slate-200
+  border:      [203, 213, 225] as [number,number,number], // slate-300
+  white:       [255, 255, 255] as [number,number,number],
+  text:        [15,  23,  42]  as [number,number,number], // slate-900
+  muted:       [100, 116, 139] as [number,number,number], // slate-500
+  lightBg:     [239, 246, 255] as [number,number,number], // blue-50
+  red:         [220,  38,  38] as [number,number,number], // red-600
+  green:       [22,  163,  74] as [number,number,number], // green-600
+  yellow:      [202, 138,   4] as [number,number,number], // yellow-600
+  subText:     [71,  85, 105]  as [number,number,number], // slate-600
+  sectionBg:   [241, 245, 249] as [number,number,number], // slate-100
 };
+
+// ─── Página A4 landscape ─────────────────────────────────────────────────────
+const PW = 297, PH = 210, ML = 10, MR = 10, MT_BODY = 18;
+const CW = PW - ML - MR; // 277mm
 
 // ─── Formatadores ─────────────────────────────────────────────────────────────
 const brl = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
-const pct = (v: number) =>
-  `${v.toFixed(1)}%`;
+const pct = (v: number, dec = 2) =>
+  `${v.toFixed(dec)}%`;
 
-const hrs = (v: number) =>
-  `${v.toFixed(1)}h`;
+const hrs = (v: number) => `${Math.round(v)}h`;
 
 const now = () =>
   new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date());
 
-// ─── Constantes de layout ─────────────────────────────────────────────────────
-const PAGE_W = 297; // A4 landscape width mm
-const PAGE_H = 210;
-const ML = 10;
-const MR = 10;
-const MT = 10;
-const CONTENT_W = PAGE_W - ML - MR;
+// ─── Capa ─────────────────────────────────────────────────────────────────────
+function drawCover(doc: jsPDF, mes: string, ano: string) {
+  doc.setFillColor(...C.headerBg);
+  doc.rect(0, 0, PW, PH, 'F');
 
-// ─── Helpers de desenho ───────────────────────────────────────────────────────
-function drawPageHeader(doc: jsPDF, title: string, subtitle: string, pageNum: number) {
-  // barra topo
-  doc.setFillColor(...C.primary);
-  doc.rect(0, 0, PAGE_W, 14, 'F');
-  // linha accent
+  // faixa central
+  doc.setFillColor(46, 93, 159);
+  doc.rect(0, PH * 0.36, PW, PH * 0.3, 'F');
+
+  // linhas accent
   doc.setFillColor(...C.accent);
-  doc.rect(0, 12.5, PAGE_W, 1.5, 'F');
+  doc.rect(0, PH * 0.36, PW, 2, 'F');
+  doc.rect(0, PH * 0.66 - 2, PW, 2, 'F');
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
+  doc.setFontSize(24);
   doc.setTextColor(...C.white);
-  doc.text(title, ML, 8.5);
+  doc.text('Relatório de Gestão Consolidado', PW / 2, PH * 0.555, { align: 'center' });
 
   doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  doc.setTextColor(191, 212, 242);
+  doc.text('Consolidação Mensal  ·  Consolidação Anual', PW / 2, PH * 0.48, { align: 'center' });
+
+  doc.setFontSize(9);
+  doc.setTextColor(148, 184, 224);
+  doc.text(`Período de referência: ${mes} / ${ano}`, PW / 2, PH * 0.415, { align: 'center' });
+
+  doc.setFontSize(7);
+  doc.setTextColor(...C.muted);
+  doc.text(`Gerado em ${now()}`, PW / 2, PH - 10, { align: 'center' });
+}
+
+// ─── Cabeçalho de página ─────────────────────────────────────────────────────
+function drawHeader(doc: jsPDF, title: string, sub: string, page: number) {
+  doc.setFillColor(...C.headerBg);
+  doc.rect(0, 0, PW, 13, 'F');
+  doc.setFillColor(...C.accent);
+  doc.rect(0, 11.5, PW, 1.5, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(...C.white);
+  doc.text(title, ML, 8);
+  doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
-  doc.text(subtitle, PAGE_W - MR, 8.5, { align: 'right' });
+  doc.text(sub, PW - MR, 8, { align: 'right' });
 
   // rodapé
   doc.setDrawColor(...C.border);
   doc.setLineWidth(0.3);
-  doc.line(ML, PAGE_H - 8, PAGE_W - MR, PAGE_H - 8);
+  doc.line(ML, PH - 7, PW - MR, PH - 7);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.5);
   doc.setTextColor(...C.muted);
-  doc.text(`Página ${pageNum}  ·  Gerado em ${now()}`, PAGE_W / 2, PAGE_H - 4.5, { align: 'center' });
+  doc.text(`Página ${page}  ·  Gerado em ${now()}`, PW / 2, PH - 3.5, { align: 'center' });
 }
 
-function drawCoverPage(doc: jsPDF, mes: string, ano: string) {
-  // fundo
-  doc.setFillColor(...C.primary);
-  doc.rect(0, 0, PAGE_W, PAGE_H, 'F');
-
-  // faixa central
-  doc.setFillColor(...C.secondary);
-  doc.rect(0, PAGE_H * 0.38, PAGE_W, PAGE_H * 0.28, 'F');
-
-  // linhas accent
-  doc.setFillColor(...C.accent);
-  doc.rect(0, PAGE_H * 0.38, PAGE_W, 2, 'F');
-  doc.rect(0, PAGE_H * 0.66 - 2, PAGE_W, 2, 'F');
-
-  // título
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(24);
-  doc.setTextColor(...C.white);
-  doc.text('Relatório de Gestão Consolidado', PAGE_W / 2, PAGE_H * 0.56, { align: 'center' });
-
-  // subtítulo
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(11);
-  doc.setTextColor(191, 212, 242);
-  doc.text('Consolidação Mensal  ·  Consolidação Anual', PAGE_W / 2, PAGE_H * 0.49, { align: 'center' });
-
-  // período
-  doc.setFontSize(9);
-  doc.setTextColor(148, 184, 224);
-  doc.text(`Período de referência: ${mes} / ${ano}`, PAGE_W / 2, PAGE_H * 0.42, { align: 'center' });
-
-  // rodapé
-  doc.setFontSize(7);
-  doc.setTextColor(100, 116, 139);
-  doc.text(`Gerado em ${now()}`, PAGE_W / 2, PAGE_H - 12, { align: 'center' });
-}
-
-function drawKpiBar(doc: jsPDF, items: { label: string; value: string }[], y: number) {
+// ─── Barra de KPIs ────────────────────────────────────────────────────────────
+function drawKpiBar(doc: jsPDF, items: { label: string; value: string }[], y: number): number {
   const n = items.length;
-  const itemW = CONTENT_W / n;
-  const barH = 14;
+  const iw = CW / n;
+  const bh = 14;
 
   items.forEach((item, i) => {
-    const x = ML + i * itemW;
-    // fundo
-    doc.setFillColor(...C.lightBlue);
-    doc.roundedRect(x + 0.5, y, itemW - 1, barH, 2, 2, 'F');
-    // borda leve
+    const x = ML + i * iw;
+    doc.setFillColor(...C.lightBg);
+    doc.roundedRect(x + 0.4, y, iw - 0.8, bh, 1.5, 1.5, 'F');
     doc.setDrawColor(...C.border);
     doc.setLineWidth(0.2);
-    doc.roundedRect(x + 0.5, y, itemW - 1, barH, 2, 2, 'S');
+    doc.roundedRect(x + 0.4, y, iw - 0.8, bh, 1.5, 1.5, 'S');
 
-    // label
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6);
+    doc.setFontSize(5.8);
     doc.setTextColor(...C.muted);
-    doc.text(item.label.toUpperCase(), x + itemW / 2, y + 4.5, { align: 'center' });
+    doc.text(item.label.toUpperCase(), x + iw / 2, y + 4.5, { align: 'center' });
 
-    // valor
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8.5);
-    doc.setTextColor(...C.primary);
-    doc.text(item.value, x + itemW / 2, y + 10.5, { align: 'center' });
+    doc.setFontSize(8);
+    doc.setTextColor(...C.headerBg);
+    doc.text(item.value, x + iw / 2, y + 10.5, { align: 'center' });
   });
 
-  return y + barH + 4;
+  return y + bh + 3;
 }
 
-// ─── Montagem da tabela mensal ────────────────────────────────────────────────
-function buildMonthlyTable(data: AreaData[]) {
-  const head = [[
-    'Área / Time', 'Custo Total', '%', 'Colab.',
-    'Faturado', 'Hrs Fat.',
-    'Desalocação', 'Hrs Des.',
-    'Overhead', 'Hrs Ovh.',
-    'Férias', 'Hrs Fér.',
-    '% Des. s/Fér.', '% Des. c/Fér.',
+// ─── Título de seção ──────────────────────────────────────────────────────────
+function drawSectionTitle(doc: jsPDF, title: string, y: number): number {
+  doc.setFillColor(...C.sectionBg);
+  doc.rect(ML, y, CW, 7, 'F');
+  doc.setFillColor(...C.accent);
+  doc.rect(ML, y, 2.5, 7, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(...C.headerBg);
+  doc.text(title, ML + 5, y + 4.8);
+  return y + 9;
+}
+
+// ─── Estilos base de tabela ───────────────────────────────────────────────────
+const BASE_STYLES = {
+  styles: {
+    fontSize: 6,
+    cellPadding: 1.8,
+    overflow: 'linebreak' as const,
+    valign: 'middle' as const,
+    lineColor: C.border as [number,number,number],
+    lineWidth: 0.2,
+    textColor: C.text as [number,number,number],
+  },
+  headStyles: {
+    fillColor: C.headerBg as [number,number,number],
+    textColor: C.white as [number,number,number],
+    fontStyle: 'bold' as const,
+    fontSize: 6,
+    halign: 'center' as const,
+    valign: 'middle' as const,
+    lineColor: C.border as [number,number,number],
+    lineWidth: 0.2,
+  },
+  footStyles: {
+    fillColor: C.totalBg as [number,number,number],
+    textColor: C.text as [number,number,number],
+    fontStyle: 'bold' as const,
+    fontSize: 6,
+    lineColor: C.border as [number,number,number],
+    lineWidth: 0.2,
+  },
+  alternateRowStyles: {
+    fillColor: C.rowAlt as [number,number,number],
+  },
+  margin: { left: ML, right: MR },
+  tableWidth: CW,
+  theme: 'grid' as const,
+};
+
+// ─── Helpers de célula ────────────────────────────────────────────────────────
+function cell(content: string, halign: 'left'|'center'|'right' = 'center'): CellDef {
+  return { content, styles: { halign } };
+}
+
+function cellBold(content: string, halign: 'left'|'center'|'right' = 'center'): CellDef {
+  return { content, styles: { halign, fontStyle: 'bold' } };
+}
+
+function cellColored(content: string, rgb: [number,number,number]): CellDef {
+  return { content, styles: { halign: 'center', textColor: rgb, fontStyle: 'bold' } };
+}
+
+function varCell(val: number): CellDef {
+  const color = val > 0 ? C.red : val < 0 ? C.green : C.muted;
+  return { content: pct(val), styles: { halign: 'center', textColor: color, fontStyle: 'bold' } };
+}
+
+function tipoCellVal(custo: number, perc: number, horas: number): CellDef {
+  return {
+    content: `${brl(custo)}\n${pct(perc)} · ${hrs(horas)}`,
+    styles: { halign: 'right', fontSize: 5.5 },
+  };
+}
+
+// ─── Totais ───────────────────────────────────────────────────────────────────
+function calcTotals(data: AreaData[]) {
+  return data.reduce((acc, d) => ({
+    custoTotal:   acc.custoTotal   + d.custoTotal,
+    colab:        acc.colab        + d.totalColaboradores,
+    debitoBH:     acc.debitoBH     + d.debitoBH.custo,
+    hDebitoBH:    acc.hDebitoBH    + d.debitoBH.horas,
+    desalocacao:  acc.desalocacao  + d.desalocacao.custo,
+    hDes:         acc.hDes         + d.desalocacao.horas,
+    faturado:     acc.faturado     + d.faturado.custo,
+    hFat:         acc.hFat         + d.faturado.horas,
+    overhead:     acc.overhead     + d.overhead.custo,
+    hOvh:         acc.hOvh         + d.overhead.horas,
+    ferias:       acc.ferias       + d.ferias.custo,
+    hFer:         acc.hFer         + d.ferias.horas,
+    custoMedioFTE: acc.custoMedioFTE + d.custoMedioFTE,
+    ociRS:        acc.ociRS        + d.ociososidadeRS,
+    ociFTE:       acc.ociFTE       + d.ociososidadeFTE,
+  }), {
+    custoTotal:0, colab:0,
+    debitoBH:0, hDebitoBH:0,
+    desalocacao:0, hDes:0,
+    faturado:0, hFat:0,
+    overhead:0, hOvh:0,
+    ferias:0, hFer:0,
+    custoMedioFTE:0, ociRS:0, ociFTE:0,
+  });
+}
+
+// ─── Tabela de Consolidação (mensal e anual) ──────────────────────────────────
+function buildConsolidationTable(
+  doc: jsPDF,
+  data: AreaData[],
+  startY: number,
+  hideOciosidade: boolean
+) {
+  const tot = calcTotals(data);
+  const pctDesSF = tot.custoTotal ? (tot.desalocacao / tot.custoTotal) * 100 : 0;
+  const pctDesCF = tot.custoTotal ? ((tot.desalocacao + tot.ferias) / tot.custoTotal) * 100 : 0;
+
+  const head: RowInput[] = [[
+    { content: 'Área / Time', styles: { halign: 'left' } },
+    'Custo Total',
+    '%',
+    'Colab.',
+    '% Colab.',
+    'Débito BH\n% · Horas',
+    'Desalocação\n% · Horas',
+    'Faturado\n% · Horas',
+    'Overhead\n% · Horas',
+    'Férias\n% · Horas',
+    '% Des.\n(-Férias)',
+    '% Des.\n(+Férias)',
+    'Meta',
+    'Var.\nMeta',
+    ...(!hideOciosidade ? ['Custo Méd.\nFTE', 'Ocio.\nR$', 'Ocio.\nFTE'] : []),
   ]];
 
-  const totals = data.reduce((acc, d) => {
-    acc.custo += d.custoTotal;
-    acc.colab += d.totalColaboradores;
-    acc.fat   += d.faturado.custo;
-    acc.des   += d.desalocacao.custo;
-    acc.ovh   += d.overhead.custo;
-    acc.fer   += d.ferias.custo;
-    acc.hFat  += d.faturado.horas;
-    acc.hDes  += d.desalocacao.horas;
-    acc.hOvh  += d.overhead.horas;
-    acc.hFer  += d.ferias.horas;
-    return acc;
-  }, { custo:0, colab:0, fat:0, des:0, ovh:0, fer:0, hFat:0, hDes:0, hOvh:0, hFer:0 });
+  const body: RowInput[] = data.map(d => {
+    const varColor = d.variacaoMeta > 0 ? C.red : d.variacaoMeta < 0 ? C.green : C.muted;
+    return [
+      cell(d.area, 'left'),
+      cell(brl(d.custoTotal), 'right'),
+      cell(pct(d.percentualCustoTotal)),
+      cell(String(d.totalColaboradores)),
+      cell(pct(d.percentualColaboradores)),
+      tipoCellVal(d.debitoBH.custo,    d.debitoBH.percentual,    d.debitoBH.horas),
+      tipoCellVal(d.desalocacao.custo, d.desalocacao.percentual, d.desalocacao.horas),
+      tipoCellVal(d.faturado.custo,    d.faturado.percentual,    d.faturado.horas),
+      tipoCellVal(d.overhead.custo,    d.overhead.percentual,    d.overhead.horas),
+      tipoCellVal(d.ferias.custo,      d.ferias.percentual,      d.ferias.horas),
+      cell(pct(d.percentualDesalocacaoSemFerias)),
+      cell(pct(d.percentualDesalocacaoComFerias)),
+      cell(pct(d.meta)),
+      { content: pct(d.variacaoMeta), styles: { halign: 'center', textColor: varColor, fontStyle: 'bold' } },
+      ...(!hideOciosidade ? [
+        cell(brl(d.custoMedioFTE), 'right'),
+        cell(d.ociososidadeRS.toFixed(2)),
+        cell(d.ociososidadeFTE.toFixed(2)),
+      ] : []),
+    ] as RowInput;
+  });
 
-  const pctDesSF = totals.custo ? (totals.des / totals.custo) * 100 : 0;
-  const pctDesCF = totals.custo ? ((totals.des + totals.fer) / totals.custo) * 100 : 0;
+  const footRow: RowInput = [
+    cellBold('TOTAL', 'left'),
+    cellBold(brl(tot.custoTotal), 'right'),
+    cellBold('100,00%'),
+    cellBold(String(tot.colab)),
+    cellBold(''),
+    { content: `${brl(tot.debitoBH)}\n${hrs(tot.hDebitoBH)}`,   styles: { halign: 'right', fontStyle: 'bold', fontSize: 5.5 } },
+    { content: `${brl(tot.desalocacao)}\n${hrs(tot.hDes)}`,     styles: { halign: 'right', fontStyle: 'bold', fontSize: 5.5 } },
+    { content: `${brl(tot.faturado)}\n${hrs(tot.hFat)}`,        styles: { halign: 'right', fontStyle: 'bold', fontSize: 5.5 } },
+    { content: `${brl(tot.overhead)}\n${hrs(tot.hOvh)}`,        styles: { halign: 'right', fontStyle: 'bold', fontSize: 5.5 } },
+    { content: `${brl(tot.ferias)}\n${hrs(tot.hFer)}`,          styles: { halign: 'right', fontStyle: 'bold', fontSize: 5.5 } },
+    cellBold(pct(pctDesSF)),
+    cellBold(pct(pctDesCF)),
+    cellBold(''),
+    cellBold(''),
+    ...(!hideOciosidade ? [
+      cellBold(brl(tot.custoMedioFTE / Math.max(data.length, 1)), 'right'),
+      cellBold(tot.ociRS.toFixed(2)),
+      cellBold(tot.ociFTE.toFixed(2)),
+    ] : []),
+  ];
 
-  const body = data.map(d => [
-    d.area,
-    brl(d.custoTotal),
-    pct(d.percentualCustoTotal),
-    String(d.totalColaboradores),
-    brl(d.faturado.custo),
-    hrs(d.faturado.horas),
-    brl(d.desalocacao.custo),
-    hrs(d.desalocacao.horas),
-    brl(d.overhead.custo),
-    hrs(d.overhead.horas),
-    brl(d.ferias.custo),
-    hrs(d.ferias.horas),
-    pct(d.percentualDesalocacaoSemFerias),
-    pct(d.percentualDesalocacaoComFerias),
+  // Larguras de coluna (soma ≤ 277mm)
+  const tipoW = hideOciosidade ? 18 : 17;
+  const colW: number[] = [
+    22,      // Área
+    17,      // Custo Total
+    8,       // %
+    7,       // Colab
+    8,       // % Colab
+    tipoW, tipoW, tipoW, tipoW, tipoW, // 5 tipos
+    10, 10,  // % Des -/+
+    8,       // Meta
+    9,       // Var Meta
+    ...(!hideOciosidade ? [13, 10, 9] : []),
+  ];
+
+  autoTable(doc, {
+    ...BASE_STYLES,
+    startY,
+    head,
+    body,
+    foot: [footRow],
+    columnStyles: Object.fromEntries(colW.map((w, i) => [i, { cellWidth: w }])),
+    didParseCell: (data) => {
+      if (data.section === 'foot') {
+        data.cell.styles.fillColor = C.totalBg;
+      }
+      // colorir % des (+Férias) nas linhas de dados
+      if (data.section === 'body' && data.column.index === 11) {
+        const val = parseFloat((data.cell.raw as string).replace('%', '').replace(',', '.'));
+        if (!isNaN(val) && val > 0) {
+          data.cell.styles.textColor =
+            val <= 10 ? C.green : val <= 20 ? C.yellow : C.red;
+          data.cell.styles.fontStyle = 'bold';
+        }
+      }
+    },
+  });
+}
+
+// ─── Tabela % Desalocação por Mês ─────────────────────────────────────────────
+const MONTH_LABELS: Record<string, string> = {
+  '01':'Jan','02':'Fev','03':'Mar','04':'Abr','05':'Mai','06':'Jun',
+  '07':'Jul','08':'Ago','09':'Set','10':'Out','11':'Nov','12':'Dez',
+};
+
+function buildDesalocacaoMensalTable(doc: jsPDF, data: DesalocacaoMensalRow[], ano: string, startY: number) {
+  if (!data.length) return;
+
+  const meses = [...new Set(data.flatMap(r => Object.keys(r.meses)))].sort();
+
+  const head: RowInput[] = [[
+    { content: 'Área / Time', styles: { halign: 'left' } },
+    ...meses.map(m => MONTH_LABELS[m] ?? m),
+  ]];
+
+  const body: RowInput[] = data.map(row => [
+    cell(row.area, 'left'),
+    ...meses.map(m => {
+      const val = row.meses[m] ?? 0;
+      if (val === 0) return cell('—');
+      const color = val <= 10 ? C.green : val <= 20 ? C.yellow : C.red;
+      return { content: pct(val), styles: { halign: 'center', textColor: color, fontStyle: 'bold' } } as CellDef;
+    }),
   ]);
 
-  const foot = [[
-    'TOTAL',
-    brl(totals.custo),
-    '100,0%',
-    String(totals.colab),
-    brl(totals.fat),
-    hrs(totals.hFat),
-    brl(totals.des),
-    hrs(totals.hDes),
-    brl(totals.ovh),
-    hrs(totals.hOvh),
-    brl(totals.fer),
-    hrs(totals.hFer),
-    pct(pctDesSF),
-    pct(pctDesCF),
-  ]];
+  const mesW = Math.max(14, (CW - 30) / Math.max(meses.length, 1));
 
-  return { head, body, foot, totals };
-}
-
-// ─── Montagem da tabela anual ─────────────────────────────────────────────────
-const MESES_ORDER = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
-                     'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-
-function buildAnnualTable(data: AreaData[], rawData: RawDataRow[], ano: string) {
-  const filtered = rawData.filter(r => r.ano === ano);
-  const meses = [...new Set(filtered.map(r => r.mes))].sort(
-    (a, b) => MESES_ORDER.indexOf(a) - MESES_ORDER.indexOf(b)
-  );
-
-  // custo por area/mes
-  const mesMap: Record<string, Record<string, number>> = {};
-  filtered.forEach(r => {
-    const area = r.time || 'Sem Time';
-    if (!mesMap[area]) mesMap[area] = {};
-    mesMap[area][r.mes] = (mesMap[area][r.mes] || 0) + r.custo_projeto;
+  autoTable(doc, {
+    ...BASE_STYLES,
+    startY,
+    head,
+    body,
+    columnStyles: {
+      0: { cellWidth: 30, halign: 'left' },
+      ...Object.fromEntries(meses.map((_, i) => [i + 1, { cellWidth: mesW, halign: 'center' }])),
+    },
   });
-
-  const totals = data.reduce((acc, d) => {
-    acc.custo += d.custoTotal;
-    acc.colab += d.totalColaboradores;
-    acc.fat   += d.faturado.custo;
-    acc.des   += d.desalocacao.custo;
-    acc.ovh   += d.overhead.custo;
-    acc.fer   += d.ferias.custo;
-    meses.forEach(m => { acc[m] = (acc[m] || 0) + (mesMap[d.area]?.[m] || 0); });
-    return acc;
-  }, { custo:0, colab:0, fat:0, des:0, ovh:0, fer:0 } as Record<string, number>);
-
-  const pctDesCF = totals.custo ? ((totals.des + totals.fer) / totals.custo) * 100 : 0;
-
-  const head = [[
-    'Área / Time', 'Custo Total', '%', 'Colab.',
-    'Faturado', 'Desalocação', 'Overhead', 'Férias', '% Des. c/Fér.',
-    ...meses.map(m => m.slice(0, 3)),
-  ]];
-
-  const body = data.map(d => {
-    const desCF = d.custoTotal ? ((d.desalocacao.custo + d.ferias.custo) / d.custoTotal) * 100 : 0;
-    return [
-      d.area,
-      brl(d.custoTotal),
-      pct(d.percentualCustoTotal),
-      String(d.totalColaboradores),
-      brl(d.faturado.custo),
-      brl(d.desalocacao.custo),
-      brl(d.overhead.custo),
-      brl(d.ferias.custo),
-      pct(desCF),
-      ...meses.map(m => brl(mesMap[d.area]?.[m] || 0)),
-    ];
-  });
-
-  const foot = [[
-    'TOTAL',
-    brl(totals.custo),
-    '100,0%',
-    String(totals.colab),
-    brl(totals.fat),
-    brl(totals.des),
-    brl(totals.ovh),
-    brl(totals.fer),
-    pct(pctDesCF),
-    ...meses.map(m => brl(totals[m] || 0)),
-  ]];
-
-  return { head, body, foot, totals, meses };
 }
-
-// ─── Estilos de tabela ────────────────────────────────────────────────────────
-function applyTableTheme(table: ReturnType<typeof autoTable>, doc: jsPDF) {}
 
 // ─── Exportação principal ─────────────────────────────────────────────────────
 export function generatePdfReport(opts: {
-  monthlyData: AreaData[];
-  yearlyData:  AreaData[];
-  rawData:     RawDataRow[];
-  mes:         string;
-  ano:         string;
+  monthlyData:       AreaData[];
+  yearlyData:        AreaData[];
+  rawData:           RawDataRow[];
+  desalocacaoMensal: DesalocacaoMensalRow[];
+  mes:               string;
+  ano:               string;
 }) {
-  const { monthlyData, yearlyData, rawData, mes, ano } = opts;
+  const { monthlyData, yearlyData, rawData, desalocacaoMensal, mes, ano } = opts;
+
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
-  // ── Capa ──────────────────────────────────────────────────────────────────
-  drawCoverPage(doc, mes, ano);
+  // ── Página 1: Capa ───────────────────────────────────────────────────────
+  drawCover(doc, mes, ano);
 
-  // ── Pág 2: Consolidação Mensal ────────────────────────────────────────────
+  // ── Página 2: Consolidação Mensal ────────────────────────────────────────
   doc.addPage();
-  drawPageHeader(doc, `Consolidação Mensal — ${mes} / ${ano}`, `${mes} / ${ano}`, 2);
+  drawHeader(doc, `Consolidação Mensal — ${mes} / ${ano}`, `${mes} / ${ano}`, 2);
 
-  let curY = MT + 8;
+  const tot_m = calcTotals(monthlyData);
+  const pctFatM  = tot_m.custoTotal ? (tot_m.faturado / tot_m.custoTotal) * 100 : 0;
+  const pctDesM  = tot_m.custoTotal ? ((tot_m.desalocacao + tot_m.ferias) / tot_m.custoTotal) * 100 : 0;
 
-  // linha separadora título
-  doc.setDrawColor(...C.accent);
-  doc.setLineWidth(0.6);
-  doc.line(ML, curY, ML + CONTENT_W, curY);
-  curY += 4;
+  let y = MT_BODY;
+  y = drawKpiBar(doc, [
+    { label: 'Custo Total',       value: brl(tot_m.custoTotal) },
+    { label: 'Colaboradores',     value: String(tot_m.colab) },
+    { label: 'Total Faturado',    value: brl(tot_m.faturado) },
+    { label: '% Faturado',        value: pct(pctFatM) },
+    { label: 'Total Desalocação', value: brl(tot_m.desalocacao) },
+    { label: '% Des. c/ Férias',  value: pct(pctDesM) },
+    { label: 'Total Overhead',    value: brl(tot_m.overhead) },
+    { label: 'Total Férias',      value: brl(tot_m.ferias) },
+  ], y);
 
-  // KPIs mensais
-  const mTotals = buildMonthlyTable(monthlyData).totals;
-  const totalCustoM = mTotals.custo;
-  const pctFatM  = totalCustoM ? (mTotals.fat / totalCustoM) * 100 : 0;
-  const pctDesM  = totalCustoM ? ((mTotals.des + mTotals.fer) / totalCustoM) * 100 : 0;
+  buildConsolidationTable(doc, monthlyData, y, false);
 
-  curY = drawKpiBar(doc, [
-    { label: 'Custo Total',        value: brl(totalCustoM) },
-    { label: 'Colaboradores',      value: String(mTotals.colab) },
-    { label: 'Total Faturado',     value: brl(mTotals.fat) },
-    { label: '% Faturado',         value: pct(pctFatM) },
-    { label: 'Total Desalocação',  value: brl(mTotals.des) },
-    { label: '% Des. c/ Férias',   value: pct(pctDesM) },
-    { label: 'Total Overhead',     value: brl(mTotals.ovh) },
-    { label: 'Total Férias',       value: brl(mTotals.fer) },
-  ], curY);
-
-  const { head: mHead, body: mBody, foot: mFoot } = buildMonthlyTable(monthlyData);
-
-  const rightCols = [1, 4, 6, 8, 10];
-  const centerCols = [2, 3, 5, 7, 9, 11, 12, 13];
-
-  autoTable(doc, {
-    startY: curY,
-    head: mHead,
-    body: mBody,
-    foot: mFoot,
-    margin: { left: ML, right: MR },
-    tableWidth: CONTENT_W,
-    theme: 'grid',
-    styles: { fontSize: 6.5, cellPadding: 2, overflow: 'linebreak', valign: 'middle' },
-    headStyles: {
-      fillColor: C.headerBg, textColor: C.white,
-      fontStyle: 'bold', fontSize: 7, halign: 'center',
-    },
-    footStyles: {
-      fillColor: C.totalBg, textColor: C.text,
-      fontStyle: 'bold', fontSize: 6.5,
-    },
-    alternateRowStyles: { fillColor: C.rowAlt },
-    columnStyles: {
-      0:  { halign: 'left',  cellWidth: 32 },
-      1:  { halign: 'right', cellWidth: 22 },
-      2:  { halign: 'center', cellWidth: 12 },
-      3:  { halign: 'center', cellWidth: 11 },
-      4:  { halign: 'right', cellWidth: 22 },
-      5:  { halign: 'center', cellWidth: 14 },
-      6:  { halign: 'right', cellWidth: 22 },
-      7:  { halign: 'center', cellWidth: 14 },
-      8:  { halign: 'right', cellWidth: 20 },
-      9:  { halign: 'center', cellWidth: 14 },
-      10: { halign: 'right', cellWidth: 18 },
-      11: { halign: 'center', cellWidth: 14 },
-      12: { halign: 'center', cellWidth: 16 },
-      13: { halign: 'center', cellWidth: 16 },
-    },
-    didParseCell: (data) => {
-      if (data.section === 'foot') {
-        data.cell.styles.fillColor = C.totalBg;
-        data.cell.styles.fontStyle = 'bold';
-        if (data.column.index === 0) data.cell.styles.halign = 'left';
-      }
-    },
-  });
-
-  // ── Pág 3: Consolidação Anual ─────────────────────────────────────────────
+  // ── Página 3: Consolidação Anual ─────────────────────────────────────────
   doc.addPage();
-  drawPageHeader(doc, `Consolidação Anual — ${ano}`, ano, 3);
+  drawHeader(doc, `Consolidação Anual — ${ano}`, ano, 3);
 
-  curY = MT + 8;
-  doc.setDrawColor(...C.accent);
-  doc.setLineWidth(0.6);
-  doc.line(ML, curY, ML + CONTENT_W, curY);
-  curY += 4;
+  const tot_a = calcTotals(yearlyData);
+  const pctFatA  = tot_a.custoTotal ? (tot_a.faturado / tot_a.custoTotal) * 100 : 0;
+  const pctDesA  = tot_a.custoTotal ? ((tot_a.desalocacao + tot_a.ferias) / tot_a.custoTotal) * 100 : 0;
 
-  const { head: aHead, body: aBody, foot: aFoot, totals: aTotals, meses } =
-    buildAnnualTable(yearlyData, rawData, ano);
-
-  const totalCustoA = aTotals.custo;
-  const pctFatA  = totalCustoA ? (aTotals.fat / totalCustoA) * 100 : 0;
-  const pctDesA  = totalCustoA ? ((aTotals.des + aTotals.fer) / totalCustoA) * 100 : 0;
-
-  curY = drawKpiBar(doc, [
-    { label: 'Custo Total Anual',  value: brl(totalCustoA) },
-    { label: 'Meses com Dados',    value: String(meses.length) },
-    { label: 'Total Faturado',     value: brl(aTotals.fat) },
+  y = MT_BODY;
+  y = drawKpiBar(doc, [
+    { label: 'Custo Total Anual',  value: brl(tot_a.custoTotal) },
+    { label: 'Meses c/ Dados',     value: String(new Set(rawData.filter(r => r.ano === ano).map(r => r.mes)).size) },
+    { label: 'Total Faturado',     value: brl(tot_a.faturado) },
     { label: '% Faturado',         value: pct(pctFatA) },
-    { label: 'Total Desalocação',  value: brl(aTotals.des) },
+    { label: 'Total Desalocação',  value: brl(tot_a.desalocacao) },
     { label: '% Des. c/ Férias',   value: pct(pctDesA) },
-    { label: 'Total Overhead',     value: brl(aTotals.ovh) },
-    { label: 'Total Férias',       value: brl(aTotals.fer) },
-  ], curY);
+    { label: 'Total Overhead',     value: brl(tot_a.overhead) },
+    { label: 'Total Férias',       value: brl(tot_a.ferias) },
+  ], y);
 
-  // larguras dinâmicas para colunas de mês
-  const fixedW = 32 + 22 + 12 + 11 + 22 + 22 + 20 + 18 + 14;
-  const mesW = meses.length > 0
-    ? Math.max(14, (CONTENT_W - fixedW) / meses.length)
-    : 16;
+  buildConsolidationTable(doc, yearlyData, y, true);
 
-  const annualColStyles: Record<number, object> = {
-    0: { halign: 'left',  cellWidth: 32 },
-    1: { halign: 'right', cellWidth: 22 },
-    2: { halign: 'center', cellWidth: 12 },
-    3: { halign: 'center', cellWidth: 11 },
-    4: { halign: 'right', cellWidth: 22 },
-    5: { halign: 'right', cellWidth: 22 },
-    6: { halign: 'right', cellWidth: 20 },
-    7: { halign: 'right', cellWidth: 18 },
-    8: { halign: 'center', cellWidth: 14 },
-  };
-  meses.forEach((_, i) => {
-    annualColStyles[9 + i] = { halign: 'right', cellWidth: mesW };
-  });
+  // ── % Desalocação por Mês ─────────────────────────────────────────────────
+  const finalY = (doc as any).lastAutoTable?.finalY ?? y + 10;
+  const remainingSpace = PH - finalY - 15;
 
-  autoTable(doc, {
-    startY: curY,
-    head: aHead,
-    body: aBody,
-    foot: aFoot,
-    margin: { left: ML, right: MR },
-    tableWidth: CONTENT_W,
-    theme: 'grid',
-    styles: { fontSize: 6.5, cellPadding: 2, overflow: 'linebreak', valign: 'middle' },
-    headStyles: {
-      fillColor: C.headerBg, textColor: C.white,
-      fontStyle: 'bold', fontSize: 7, halign: 'center',
-    },
-    footStyles: {
-      fillColor: C.totalBg, textColor: C.text,
-      fontStyle: 'bold', fontSize: 6.5,
-    },
-    alternateRowStyles: { fillColor: C.rowAlt },
-    columnStyles: annualColStyles,
-    didParseCell: (data) => {
-      if (data.section === 'foot') {
-        data.cell.styles.fillColor = C.totalBg;
-        data.cell.styles.fontStyle = 'bold';
-        if (data.column.index === 0) data.cell.styles.halign = 'left';
-      }
-      // linha separadora antes das colunas de mês
-      if (data.column.index === 8) {
-        data.cell.styles.lineWidth = { right: 0.5 };
-      }
-    },
-  });
+  const sectionY = remainingSpace > 40 ? finalY + 6 : (doc.addPage(), drawHeader(doc, `% Desalocação (+Férias) por Mês — ${ano}`, ano, 4), MT_BODY);
 
-  // ── Download ──────────────────────────────────────────────────────────────
-  const filename = `Relatorio_Gestao_${mes}_${ano}.pdf`;
-  doc.save(filename);
+  if (remainingSpace > 40) {
+    drawSectionTitle(doc, `% Desalocação (+Férias) por Mês — Ano ${ano}`, sectionY);
+    buildDesalocacaoMensalTable(doc, desalocacaoMensal, ano, sectionY + 9);
+  } else {
+    drawSectionTitle(doc, `% Desalocação (+Férias) por Mês — Ano ${ano}`, sectionY);
+    buildDesalocacaoMensalTable(doc, desalocacaoMensal, ano, sectionY + 9);
+  }
+
+  doc.save(`Relatorio_Gestao_${mes}_${ano}.pdf`);
 }

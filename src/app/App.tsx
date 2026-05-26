@@ -160,6 +160,7 @@ export default function App() {
                   monthlyData={monthlyData}
                   yearlyData={yearlyData}
                   rawData={filteredRawData}
+                  desalocacaoMensal={desalocacaoMensalData}
                   mes={selectedMonth}
                   ano={selectedYear}
                 />
