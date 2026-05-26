@@ -10,6 +10,7 @@ import { EmptyState } from './components/EmptyState';
 import { NoDataMessage } from './components/NoDataMessage';
 import { DesalocacaoMensalTable } from './components/DesalocacaoMensalTable';
 import { PreVendasTable } from './components/PreVendasTable';
+import { PdfReportButton } from './components/PdfReportButton';
 import { DesalocacaoChart } from './components/DesalocacaoChart';
 import { CustoChart } from './components/CustoChart';
 import { DebugInfo } from './components/DebugInfo';
@@ -149,11 +150,20 @@ export default function App() {
             />
 
             <Tabs defaultValue="monthly" className="w-full">
-              <TabsList>
-                <TabsTrigger value="monthly">Consolidação Mensal</TabsTrigger>
-                <TabsTrigger value="yearly">Consolidação Anual</TabsTrigger>
-                <TabsTrigger value="prevendas">Pré-Vendas</TabsTrigger>
-              </TabsList>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <TabsList>
+                  <TabsTrigger value="monthly">Consolidação Mensal</TabsTrigger>
+                  <TabsTrigger value="yearly">Consolidação Anual</TabsTrigger>
+                  <TabsTrigger value="prevendas">Pré-Vendas</TabsTrigger>
+                </TabsList>
+                <PdfReportButton
+                  monthlyData={monthlyData}
+                  yearlyData={yearlyData}
+                  rawData={filteredRawData}
+                  mes={selectedMonth}
+                  ano={selectedYear}
+                />
+              </div>
               <TabsContent value="monthly" className="mt-6 space-y-6">
                 {monthlyData.length > 0 ? (
                   <>
