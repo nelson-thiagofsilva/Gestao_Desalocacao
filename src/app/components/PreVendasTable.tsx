@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from './ui/dialog';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { type RawDataRow, consolidatePreVendas, type PreVendaRow } from '../utils/dataParser';
 
 interface PreVendasTableProps {
@@ -37,6 +37,9 @@ interface ClienteGroup {
   pctVendido: number;
 }
 
+type SortField = 'qtdPVs' | 'totalHoras' | 'custoTotal' | 'pctVendido' | 'projetoVendido';
+type SortDir = 'asc' | 'desc';
+
 function buildGroups(rows: PreVendaRow[]): ClienteGroup[] {
   const map = new Map<string, PreVendaRow[]>();
   rows.forEach(r => {
@@ -54,16 +57,69 @@ function buildGroups(rows: PreVendaRow[]): ClienteGroup[] {
   return groups.sort((a, b) => a.cliente.localeCompare(b.cliente));
 }
 
+function sortGroups(groups: ClienteGroup[], field: SortField | null, dir: SortDir): ClienteGroup[] {
+  if (!field) return groups;
+  return [...groups].sort((a, b) => {
+    let va: number, vb: number;
+    switch (field) {
+      case 'qtdPVs':        va = a.propostas.length; vb = b.propostas.length; break;
+      case 'totalHoras':    va = a.totalHoras;        vb = b.totalHoras;        break;
+      case 'custoTotal':    va = a.custoTotal;        vb = b.custoTotal;        break;
+      case 'pctVendido':    va = a.pctVendido;        vb = b.pctVendido;        break;
+      case 'projetoVendido':va = a.qtdVendido;        vb = b.qtdVendido;        break;
+      default:              return 0;
+    }
+    return dir === 'asc' ? va - vb : vb - va;
+  });
+}
+
+interface SortHeaderProps {
+  label: React.ReactNode;
+  field: SortField;
+  current: SortField | null;
+  dir: SortDir;
+  onSort: (f: SortField) => void;
+  className?: string;
+}
+
+function SortHeader({ label, field, current, dir, onSort, className }: SortHeaderProps) {
+  const active = current === field;
+  const Icon = active ? (dir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
+  return (
+    <TableHead
+      className={`cursor-pointer select-none hover:bg-muted/60 transition-colors ${className ?? ''}`}
+      onClick={() => onSort(field)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        <Icon className={`h-3.5 w-3.5 ${active ? 'text-foreground' : 'text-muted-foreground/50'}`} />
+      </span>
+    </TableHead>
+  );
+}
+
 export function PreVendasTable({ rawData }: PreVendasTableProps) {
   const [rows, setRows] = useState<PreVendaRow[]>([]);
   const [expandedClientes, setExpandedClientes] = useState<Set<string>>(new Set());
   const [drillDown, setDrillDown] = useState<DrillDown | null>(null);
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   useEffect(() => {
     setRows(consolidatePreVendas(rawData));
   }, [rawData]);
 
-  const groups = buildGroups(rows);
+  const baseGroups = buildGroups(rows);
+  const groups = sortGroups(baseGroups, sortField, sortDir);
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('desc');
+    }
+  };
 
   const toggleCliente = (cliente: string) => {
     setExpandedClientes(prev => {
@@ -167,13 +223,46 @@ export function PreVendasTable({ rawData }: PreVendasTableProps) {
                   <TableRow>
                     <TableHead className="w-8" />
                     <TableHead className="min-w-[180px]">Cliente / Proposta</TableHead>
-                    <TableHead className="min-w-[110px] text-center">Qtd. PVs</TableHead>
-                    <TableHead className="min-w-[140px] text-right">Total Horas</TableHead>
-                    <TableHead className="min-w-[160px]">
-                      <span title="Clique no valor para ver os lançamentos">Custo Total ↗</span>
-                    </TableHead>
-                    <TableHead className="min-w-[140px] text-center">% Vendido</TableHead>
-                    <TableHead className="min-w-[140px] text-center">Projeto Vendido</TableHead>
+                    <SortHeader
+                      label="Qtd. PVs"
+                      field="qtdPVs"
+                      current={sortField}
+                      dir={sortDir}
+                      onSort={handleSort}
+                      className="min-w-[110px] text-center"
+                    />
+                    <SortHeader
+                      label="Total Horas"
+                      field="totalHoras"
+                      current={sortField}
+                      dir={sortDir}
+                      onSort={handleSort}
+                      className="min-w-[140px] text-right"
+                    />
+                    <SortHeader
+                      label={<span title="Clique no valor para ver os lançamentos">Custo Total ↗</span>}
+                      field="custoTotal"
+                      current={sortField}
+                      dir={sortDir}
+                      onSort={handleSort}
+                      className="min-w-[160px]"
+                    />
+                    <SortHeader
+                      label="% Vendido"
+                      field="pctVendido"
+                      current={sortField}
+                      dir={sortDir}
+                      onSort={handleSort}
+                      className="min-w-[140px] text-center"
+                    />
+                    <SortHeader
+                      label="Projeto Vendido"
+                      field="projetoVendido"
+                      current={sortField}
+                      dir={sortDir}
+                      onSort={handleSort}
+                      className="min-w-[140px] text-center"
+                    />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
