@@ -33,6 +33,8 @@ export default function App() {
   const [selectedYear, setSelectedYear] = useState<string>('');
   const [metas, setMetas] = useState<Record<string, number>>({});
   const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
+  // Persiste os toggles "Vendido" das pré-vendas entre trocas de aba
+  const [soldProposals, setSoldProposals] = useState<Set<string>>(new Set());
 
   const handleDataLoad = (content: string) => {
     try {
@@ -212,7 +214,11 @@ export default function App() {
                 )}
               </TabsContent>
               <TabsContent value="prevendas" className="mt-6">
-                <PreVendasTable rawData={filteredRawData} />
+                <PreVendasTable
+                  rawData={filteredRawData}
+                  soldProposals={soldProposals}
+                  onSoldProposalsChange={setSoldProposals}
+                />
               </TabsContent>
             </Tabs>
           </>

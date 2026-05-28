@@ -20,6 +20,9 @@ import { type RawDataRow, consolidatePreVendas, type PreVendaRow } from '../util
 
 interface PreVendasTableProps {
   rawData: RawDataRow[];
+  /** Conjunto de chaves "cliente||proposta" marcadas como vendidas (estado persistido externamente) */
+  soldProposals: Set<string>;
+  onSoldProposalsChange: (s: Set<string>) => void;
 }
 
 interface DrillDown {
@@ -40,7 +43,11 @@ interface ClienteGroup {
 type SortField = 'qtdPVs' | 'totalHoras' | 'custoTotal' | 'pctVendido' | 'projetoVendido';
 type SortDir = 'asc' | 'desc';
 
-function buildGroups(rows: PreVendaRow[]): ClienteGroup[] {
+function soldKey(cliente: string, proposta: string) {
+  return `${cliente}||${proposta}`;
+}
+
+function buildGroups(rows: PreVendaRow[], soldProposals: Set<string>): ClienteGroup[] {
   const map = new Map<string, PreVendaRow[]>();
   rows.forEach(r => {
     if (!map.has(r.cliente)) map.set(r.cliente, []);
@@ -50,7 +57,7 @@ function buildGroups(rows: PreVendaRow[]): ClienteGroup[] {
   map.forEach((propostas, cliente) => {
     const custoTotal = propostas.reduce((s, p) => s + p.custoTotal, 0);
     const totalHoras = propostas.reduce((s, p) => s + p.totalHoras, 0);
-    const qtdVendido = propostas.filter(p => p.projetoVendido).length;
+    const qtdVendido = propostas.filter(p => soldProposals.has(soldKey(p.cliente, p.proposta))).length;
     const pctVendido = propostas.length > 0 ? (qtdVendido / propostas.length) * 100 : 0;
     groups.push({ cliente, propostas, custoTotal, totalHoras, qtdVendido, pctVendido });
   });
@@ -98,7 +105,7 @@ function SortHeader({ label, field, current, dir, onSort, className }: SortHeade
   );
 }
 
-export function PreVendasTable({ rawData }: PreVendasTableProps) {
+export function PreVendasTable({ rawData, soldProposals, onSoldProposalsChange }: PreVendasTableProps) {
   const [rows, setRows] = useState<PreVendaRow[]>([]);
   const [expandedClientes, setExpandedClientes] = useState<Set<string>>(new Set());
   const [drillDown, setDrillDown] = useState<DrillDown | null>(null);
@@ -109,7 +116,10 @@ export function PreVendasTable({ rawData }: PreVendasTableProps) {
     setRows(consolidatePreVendas(rawData));
   }, [rawData]);
 
-  const baseGroups = buildGroups(rows);
+  const isVendido = (cliente: string, proposta: string) =>
+    soldProposals.has(soldKey(cliente, proposta));
+
+  const baseGroups = buildGroups(rows, soldProposals);
   const groups = sortGroups(baseGroups, sortField, sortDir);
 
   const handleSort = (field: SortField) => {
@@ -130,13 +140,10 @@ export function PreVendasTable({ rawData }: PreVendasTableProps) {
   };
 
   const toggleVendido = (cliente: string, proposta: string) => {
-    setRows(prev =>
-      prev.map(r =>
-        r.cliente === cliente && r.proposta === proposta
-          ? { ...r, projetoVendido: !r.projetoVendido }
-          : r
-      )
-    );
+    const key = soldKey(cliente, proposta);
+    const next = new Set(soldProposals);
+    next.has(key) ? next.delete(key) : next.add(key);
+    onSoldProposalsChange(next);
   };
 
   const openDrillDown = (cliente: string, proposta: string) => {
@@ -155,8 +162,8 @@ export function PreVendasTable({ rawData }: PreVendasTableProps) {
 
   const totalCusto = rows.reduce((s, r) => s + r.custoTotal, 0);
   const totalHoras = rows.reduce((s, r) => s + r.totalHoras, 0);
-  const totalVendidas = rows.filter(r => r.projetoVendido).length;
-  const custoVendidas = rows.filter(r => r.projetoVendido).reduce((s, r) => s + r.custoTotal, 0);
+  const totalVendidas = rows.filter(r => isVendido(r.cliente, r.proposta)).length;
+  const custoVendidas = rows.filter(r => isVendido(r.cliente, r.proposta)).reduce((s, r) => s + r.custoTotal, 0);
 
   const drillDownTotal = drillDown ? drillDown.rows.reduce((s, r) => s + r.custo_projeto, 0) : 0;
   const drillDownHoras = drillDown ? drillDown.rows.reduce((s, r) => s + r.qtdehoras, 0) : 0;
@@ -302,49 +309,52 @@ export function PreVendasTable({ rawData }: PreVendasTableProps) {
                         </TableRow>
 
                         {/* ── Proposal detail rows ── */}
-                        {expanded && group.propostas.map(row => (
-                          <TableRow
-                            key={`${row.cliente}-${row.proposta}`}
-                            className={row.projetoVendido ? 'bg-green-50 dark:bg-green-950/20' : 'bg-background'}
-                          >
-                            <TableCell />
-                            <TableCell className="pl-7 text-sm text-muted-foreground">
-                              ↳ {row.proposta}
-                            </TableCell>
-                            <TableCell className="text-center text-muted-foreground text-sm">—</TableCell>
-                            <TableCell className="text-right tabular-nums text-sm">
-                              {fmtH(row.totalHoras)}
-                            </TableCell>
-                            {/* Custo — clicável drill-down */}
-                            <TableCell
-                              className="cursor-pointer hover:bg-muted/60 transition-colors select-none text-sm"
-                              onClick={() => openDrillDown(row.cliente, row.proposta)}
+                        {expanded && group.propostas.map(row => {
+                          const vendido = isVendido(row.cliente, row.proposta);
+                          return (
+                            <TableRow
+                              key={`${row.cliente}-${row.proposta}`}
+                              className={vendido ? 'bg-green-50 dark:bg-green-950/20' : 'bg-background'}
                             >
-                              <span className="underline decoration-dotted tabular-nums">
-                                {fmt(row.custoTotal)}
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-center text-muted-foreground text-sm">—</TableCell>
-                            <TableCell className="text-center">
-                              <button
-                                onClick={() => toggleVendido(row.cliente, row.proposta)}
-                                className="focus:outline-none"
-                                title={row.projetoVendido ? 'Marcar como não vendido' : 'Marcar como vendido'}
+                              <TableCell />
+                              <TableCell className="pl-7 text-sm text-muted-foreground">
+                                ↳ {row.proposta}
+                              </TableCell>
+                              <TableCell className="text-center text-muted-foreground text-sm">—</TableCell>
+                              <TableCell className="text-right tabular-nums text-sm">
+                                {fmtH(row.totalHoras)}
+                              </TableCell>
+                              {/* Custo — clicável drill-down */}
+                              <TableCell
+                                className="cursor-pointer hover:bg-muted/60 transition-colors select-none text-sm"
+                                onClick={() => openDrillDown(row.cliente, row.proposta)}
                               >
-                                <Badge
-                                  variant={row.projetoVendido ? 'default' : 'outline'}
-                                  className={
-                                    row.projetoVendido
-                                      ? 'cursor-pointer bg-green-600 hover:bg-green-700 select-none'
-                                      : 'cursor-pointer hover:bg-muted select-none'
-                                  }
+                                <span className="underline decoration-dotted tabular-nums">
+                                  {fmt(row.custoTotal)}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-center text-muted-foreground text-sm">—</TableCell>
+                              <TableCell className="text-center">
+                                <button
+                                  onClick={() => toggleVendido(row.cliente, row.proposta)}
+                                  className="focus:outline-none"
+                                  title={vendido ? 'Marcar como não vendido' : 'Marcar como vendido'}
                                 >
-                                  {row.projetoVendido ? '✓ Vendido' : 'Pendente'}
-                                </Badge>
-                              </button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                                  <Badge
+                                    variant={vendido ? 'default' : 'outline'}
+                                    className={
+                                      vendido
+                                        ? 'cursor-pointer bg-green-600 hover:bg-green-700 select-none'
+                                        : 'cursor-pointer hover:bg-muted select-none'
+                                    }
+                                  >
+                                    {vendido ? '✓ Vendido' : 'Pendente'}
+                                  </Badge>
+                                </button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </>
                     );
                   })}
