@@ -264,8 +264,9 @@ export default function App() {
                 </TabsContent>
 
                 <TabsContent value="prevendas" className="mt-6">
+                  {/* Pré-Vendas ignora filtro de área — usa todos os registros */}
                   <PreVendasTable
-                    rawData={filteredRawData}
+                    rawData={rawData}
                     soldProposals={db.soldProposals}
                     onSoldProposalsChange={db.setSoldProposals}
                   />
